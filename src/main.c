@@ -216,7 +216,9 @@ int main(void) {
             // free(json_routing);
 
             // DEBUG PRINT
-            //pad_pos += print_smart(chat_pad, pad_pos, 6, response_routing);
+            mvwprintw(chat_pad, pad_pos, 0, " Orchester: ");
+            pad_pos += print_smart(chat_pad, pad_pos, 12, response_routing);
+            refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
 
             char* llm_query = create_ollama_request(model_name, input_text, false);
             char* llm_response = send_request_to_ollama(llm_query);

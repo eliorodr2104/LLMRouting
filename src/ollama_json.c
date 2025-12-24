@@ -69,11 +69,9 @@ create_orchester_query(const char* input_text) {
 
     // Models placeholder
     const char *models_data[] = {
-        "qwen2.5-coder:14b",
-        "qwen2.5-coder:7b",
-        "qwen3:14b"
+        "qwen2.5-coder:7b"
     };
-    cJSON *models_array = cJSON_CreateStringArray(models_data, 3);
+    cJSON *models_array = cJSON_CreateStringArray(models_data, 1);
     cJSON_AddItemToObject(json_orchestrator, "available_models", models_array);
 
     // Context placeholder
