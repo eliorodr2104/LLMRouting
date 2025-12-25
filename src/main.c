@@ -12,16 +12,17 @@
 #define KEY_ESC 27
 #define PAD_HEIGHT 3000
 
-// Disegna solo la cornice (il contenitore)
-void draw_home_frame(WINDOW *win) {
+void
+draw_home_frame(WINDOW *win) {
     wattron(win, COLOR_PAIR(1));
-    box(win, 0, 0); // Disegna il bordo verde
+    box(win, 0, 0);
     mvwprintw(win, 0, 2, " Chat ");
     wattroff(win, COLOR_PAIR(1));
     wrefresh(win);
 }
 
-void draw_input(WINDOW *win) {
+void
+draw_input(WINDOW *win) {
     wattron(win, COLOR_PAIR(2));
     box(win, 0, 0);
     mvwprintw(win, 0, 2, " Input ");
@@ -29,19 +30,22 @@ void draw_input(WINDOW *win) {
     wrefresh(win);
 }
 
-// Funzione helper per aggiornare la vista del Pad
-void refresh_pad_view(WINDOW *pad, const int scroll_y, const int screen_height, const int screen_width) {
-    // prefresh(pad,
-    //          pad_min_y, pad_min_x,       <- Angolo alto-sx del contenuto del pad da mostrare
-    //          screen_min_y, screen_min_x, <- Dove inizia a disegnare sullo schermo (dentro il bordo)
-    //          screen_max_y, screen_max_x) <- Dove finisce a disegnare sullo schermo
+void
+refresh_pad_view(
+    WINDOW *pad,
+    const int scroll_y,
+    const int screen_height,
+    const int screen_width
+) {
 
-    // Disegniamo da riga 1, colonna 1 a riga H-2, colonna W-2 (per stare dentro il box)
-    prefresh(pad,
-             scroll_y, 0,       // Da dove inizia il pad
-             1, 1,              // Dove inizia sullo schermo (top-left)
-             screen_height - 5, // <--- MODIFICA QUI: Limite in basso (bottom-right)
-             screen_width - 2   // Limite a destra
+    prefresh(
+        pad,
+        scroll_y,
+        0,
+        1,
+        1,
+        screen_height - 5,
+        screen_width - 2
     );
 }
 
@@ -59,7 +63,8 @@ cJSON_error_print(const cJSON* json) {
     return true;
 }
 
-static char* filter_str(const char* str) {
+static char*
+    filter_str(const char* str) {
     size_t len = 0;
     for (len = 0; str[len] != '\0'; len++) {
         if (str[len] == '-' || str[len] == '_' || str[len] == ':') break;
@@ -88,20 +93,14 @@ int main(void) {
     int max_h, max_w;
     getmaxyx(stdscr, max_h, max_w);
 
-    // 1. HOME WIN (Solo Cornice)
-    // Altezza schermo - 3 (spazio per input)
     WINDOW *home_frame = newwin(max_h - 3, max_w, 0, 0);
 
-    // 2. CHAT PAD (Contenuto Scrorrevole)
-    // Alto PAD_HEIGHT, Largo quanto l'interno della cornice (width - 2)
     WINDOW *chat_pad = newpad(PAD_HEIGHT, max_w - 2);
-    // Abilita lo scrolling del pad stesso (opzionale, ma utile per waddch)
     scrollok(chat_pad, TRUE);
 
-    // Variabili di stato per lo scroll
-    int pad_pos = 0; // Dove stiamo scrivendo attualmente nel pad
-    int scroll_y = 0; // La riga del pad che è visualizzata in alto nello schermo
-    int view_height = max_h - 5; // Altezza visibile effettiva (tolti bordi cornice e input)
+    int pad_pos = 0;
+    int scroll_y = 0;
+    const int view_height = max_h - 5;
 
     WINDOW *input_win = newwin(3, max_w, max_h - 3, 0);
     keypad(input_win, TRUE);
@@ -118,60 +117,74 @@ int main(void) {
     char *input_text = calloc(buf_size, sizeof(char));
 
     int ch;
+    int input_cursor_index = 1;
     while ((ch = wgetch(input_win)) != KEY_ESC) {
 
-        // --- GESTIONE SCROLLING MANUALE ---
-        // Se premi PagSu/PagGiù o Frecce su input, scorriamo la chat sopra
-        if (ch == KEY_PPAGE || ch == KEY_UP) { // Page Up o Freccia Su
+        // Manual Scrolling
+        // Page Up o Arrow Up
+        if (ch == KEY_PPAGE || ch == KEY_UP) {
             if (scroll_y > 0) scroll_y--;
-            if (ch == KEY_PPAGE) scroll_y -= 5; // Scroll più veloce
+            if (ch == KEY_PPAGE) scroll_y -= 5;
             if (scroll_y < 0) scroll_y = 0;
 
             refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
-            continue; // Torna al loop, non scrivere nell'input
+            continue;
         }
 
-        if (ch == KEY_NPAGE || ch == KEY_DOWN) { // Page Down o Freccia Giù
-            // Non scorrere oltre l'ultima riga scritta
+        // Page Down or Arrow Down
+        if (ch == KEY_NPAGE || ch == KEY_DOWN) {
             if (scroll_y < pad_pos - view_height + 1) scroll_y++;
             if (ch == KEY_NPAGE) scroll_y += 5;
-            // Controllo limiti (non andare nel vuoto troppo oltre)
+
             if (scroll_y > pad_pos) scroll_y = pad_pos;
 
             refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
             continue;
         }
 
-        // --- GESTIONE INVIO ---
+        const int input_len = (int)strlen(input_text);
+        if (ch == KEY_LEFT && input_len > 0 && input_cursor_index > 1) {
+            input_cursor_index--;
+            wmove(input_win, 1, input_cursor_index);
+            wrefresh(input_win);
+            continue;
+        }
+
+        if (ch == KEY_RIGHT && input_len > 0 && input_cursor_index <= input_len) {
+            input_cursor_index++;
+            wmove(input_win, 1, input_cursor_index);
+            wrefresh(input_win);
+            continue;
+        }
+
+        // Enter pressed
         if ((ch == '\n' || ch == KEY_ENTER) && len > 0) {
 
-            // 1. Scrivi "You: ..." nel PAD
+            // Write You tag
             wattron(chat_pad, A_BOLD);
-            // Usiamo print_smart anche qui per sicurezza o mvwprintw standard
-            // Nota: pad_pos è la riga, 0 è la colonna (relativa al pad)
             mvwprintw(chat_pad, pad_pos, 0, " You: %s\n", input_text);
             pad_pos++;
             wattroff(chat_pad, A_BOLD);
 
-            // Aggiorna vista subito
-            // Auto-scroll in basso se necessario
+            // Update view and auto-scroll if is needed
             if (pad_pos > view_height) scroll_y = pad_pos - view_height + 1;
             refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
 
-            // Pulisci input
-            wmove(input_win, 1, 1);
+            // Clean input
+            input_cursor_index = 1;
+            wmove(input_win, 1, input_cursor_index);
             wclrtoeol(input_win);
-            draw_input(input_win); // Ridisegna bordo input se rovinato
+            draw_input(input_win);
             wrefresh(input_win);
 
-            // Orchester SLM query
+            // Orchester SLM Query
             char* router_query = create_orchester_query(input_text);
 
             char* json_request = create_ollama_request(ROUTER, router_query, true);
             char* query_routing = send_request_to_ollama(json_request);
             char* response_routing = parse_ollama_response(query_routing);
 
-            // LLM Request
+            // Get json
             cJSON* routing_info = cJSON_Parse(response_routing);
 
             if (!cJSON_error_print(routing_info)) {
@@ -213,13 +226,15 @@ int main(void) {
             }
 
             free(query_routing);
-            // free(json_routing);
 
             // DEBUG PRINT
             mvwprintw(chat_pad, pad_pos, 0, " Orchester: ");
             pad_pos += print_smart(chat_pad, pad_pos, 12, response_routing);
             refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
 
+            free(response_routing);
+
+            // LLM Query
             char* llm_query = create_ollama_request(model_name, input_text, false);
             char* llm_response = send_request_to_ollama(llm_query);
 
@@ -227,17 +242,14 @@ int main(void) {
                 char* clean_text = parse_ollama_response(llm_response);
                 char* clean_name = filter_str(model_name);
 
-                // 2. Scrivi risposta LLM nel PAD
+                // Write LLM response
                 mvwprintw(chat_pad, pad_pos, 0, " %s: ", clean_name);
 
-                // IMPORTANTE: passiamo chat_pad a print_smart.
-                // start_x è 6 (dopo " LLM: "), start_y è pad_pos attuale
                 const int start_x = (int)strlen(clean_name);
                 pad_pos += print_smart(chat_pad, pad_pos, start_x + 3, clean_text);
 
-                // Auto-scroll in fondo per vedere la risposta
                 if (pad_pos > view_height) {
-                    scroll_y = pad_pos - view_height + 1; // +1 per margine
+                    scroll_y = pad_pos - view_height + 1;
                 }
 
                 free(clean_text);
@@ -245,29 +257,62 @@ int main(void) {
                 free(llm_query);
                 free(llm_response);
 
-                // Ridisegna il pad nella sua nuova posizione
+                // Redraw pad
                 refresh_pad_view(chat_pad, scroll_y, max_h, max_w);
             }
 
             memset(input_text, 0, buf_size);
             len = 0;
 
+            // wmove(input_win, input_cursor_index, 1);
+            // wclrtoeol(input_win);
+            // draw_input(input_win);
+            // wmove(input_win, 1, 1);
+
+        } else if ((ch == KEY_BACKSPACE || ch == 127 || ch == '\b') && len > 0) {
+
+            // C I A O \0
+            // C
+            // I A O \0
+
+            const int array_cursor = input_cursor_index - 1;
+            memmove(
+                &input_text[array_cursor - 1],
+                &input_text[array_cursor],
+                strlen(input_text) - array_cursor + 1
+            );
+
+            input_cursor_index--;
+            len--;
+
             wmove(input_win, 1, 1);
             wclrtoeol(input_win);
             draw_input(input_win);
-            wmove(input_win, 1, 1);
 
-        } else if ((ch == KEY_BACKSPACE || ch == 127 || ch == '\b') && len > 0) {
-            len--;
-            input_text[len] = '\0';
-            mvwaddch(input_win, 1, 1 + len, ' ');
-            wmove(input_win, 1, (int)len + 1);
+            mvwaddstr(input_win, 1, 1, input_text);
+
+            wmove(input_win, 1, input_cursor_index);
+            wrefresh(input_win);
 
         } else if (len < buf_size - 1 && ch >= 32 && ch <= 126) {
-            input_text[len] = (char)ch;
-            input_text[len + 1] = '\0';
-            waddch(input_win, ch);
+            const int array_pos = input_cursor_index - 1;
+
+            memmove(
+                &input_text[array_pos + 1],
+                &input_text[array_pos],
+                len - array_pos + 1
+            );
+
+            input_text[array_pos] = (char)ch;
+
             len++;
+            input_cursor_index++;
+
+            wmove(input_win, 1, 1);
+            wclrtoeol(input_win);
+            draw_input(input_win);
+            mvwaddstr(input_win, 1, 1, input_text);
+            wmove(input_win, 1, input_cursor_index);
         }
 
         wrefresh(input_win);
